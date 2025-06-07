@@ -1,3 +1,13 @@
+## ⚠️ WARNING: Experimental Fork – Use with Caution
+
+This fork of SvelteKit includes **naive overrides of internal route functions** to support advanced customization for projects like [`sveltekit-multiple-route-entry-points`](https://github.com/thomasefbland/sveltekit-multiple-route-entry-points).
+
+> ⚠️ **This is not a general-purpose fork.** The implementation is **highly experimental**, **not well abstracted**, and **likely to break** with changes to SvelteKit’s internal APIs. It is intended only for very specific use cases and may not be stable or compatible with other plugins or future versions of SvelteKit.
+
+**Use at your own risk.**
+
+---
+
 [![Chat](https://img.shields.io/discord/457912077277855764?label=chat&logo=discord)](https://svelte.dev/chat)
 
 # SvelteKit
