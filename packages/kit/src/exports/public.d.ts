@@ -15,12 +15,39 @@ import {
 	PrerenderMissingIdHandlerValue,
 	PrerenderOption,
 	RequestOptions,
-	RouteSegment
+	RouteSegment,
+	TrailingSlash
 } from '../types/private.js';
-import { BuildData, SSRNodeLoader, SSRRoute, ValidatedConfig } from 'types';
+export { MaybePromise };
+import {
+	BuildData,
+	ManifestData,
+	PageNode,
+	RouteData,
+	SSRNodeLoader,
+	SSRRoute,
+	ValidatedConfig,
+	RouteParam,
+	PrerenderEntryGenerator,
+	SSRComponentLoader,
+	UniversalNode
+} from 'types';
+export {
+	PageNode,
+	RouteData,
+	ValidatedConfig,
+	ManifestData,
+	RouteParam,
+	PrerenderEntryGenerator,
+	SSRComponentLoader,
+	TrailingSlash,
+	UniversalNode
+};
 import type { PluginOptions } from '@sveltejs/vite-plugin-svelte';
 
 export { PrerenderOption } from '../types/private.js';
+
+export type { RouteFile } from '../core/sync/create_manifest_data/types.d.ts';
 
 /**
  * [Adapters](https://svelte.dev/docs/kit/adapters) are responsible for taking the production build and turning it into something that can be deployed to a platform of your choosing.
@@ -466,6 +493,43 @@ export interface KitConfig {
 		 * @default "src/error.html"
 		 */
 		errorTemplate?: string;
+	};
+	/**
+	 * Allows overriding internal routing and typing generation functions.
+	 * This is an advanced feature intended for meta-frameworks or tooling authors who need
+	 * custom behavior for how routes and their associated types are constructed.
+	 *
+	 * You should generally not need to use this unless you are building something like a custom
+	 * SvelteKit integration, file-based router transformer, or development tool.
+	 *
+	 */
+	route_function_overrides?: {
+		/**
+		 * A function that returns the nodes and routes for the app.
+		 * This is a replacement for SvelteKit's internal `create_routes_and_nodes` function,
+		 * used during the build and dev processes to determine the structure of the application.
+		 */
+		create_routes_and_nodes?: (
+			config: ValidatedConfig,
+			cwd: string,
+			fallback: string
+		) => { nodes: PageNode[]; routes: RouteData[] };
+
+		/**
+		 * Replaces the internal function that writes all type declarations on sync.init,
+		 * including route and endpoint types. Use this to change or intercept the output.
+		 *
+		 * If you are using this, you likely need to also override write_types
+		 */
+		write_all_types?: (config: ValidatedConfig, manifest_data: ManifestData) => void;
+
+		/**
+		 * Replaces the internal function that writes a single type declaration file when its
+		 * content is updated. Not called on deletion or creation (or at least not supposed to be).
+		 *
+		 * If you are using this, you likely will also want to override write_all_types
+		 */
+		write_types?: (config: ValidatedConfig, manifest_data: ManifestData, file: string) => void;
 	};
 	/**
 	 * Inline CSS inside a `<style>` block at the head of the HTML. This option is a number that specifies the maximum length of a CSS file in UTF-16 code units, as specified by the [String.length](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/length) property, to be inlined. All CSS files needed for the page and smaller than this value are merged and inlined in a `<style>` block.

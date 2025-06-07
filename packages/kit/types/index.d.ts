@@ -450,6 +450,43 @@ declare module '@sveltejs/kit' {
 			errorTemplate?: string;
 		};
 		/**
+		 * Allows overriding internal routing and typing generation functions.
+		 * This is an advanced feature intended for meta-frameworks or tooling authors who need
+		 * custom behavior for how routes and their associated types are constructed.
+		 *
+		 * You should generally not need to use this unless you are building something like a custom
+		 * SvelteKit integration, file-based router transformer, or development tool.
+		 *
+		 */
+		route_function_overrides?: {
+			/**
+			 * A function that returns the nodes and routes for the app.
+			 * This is a replacement for SvelteKit's internal `create_routes_and_nodes` function,
+			 * used during the build and dev processes to determine the structure of the application.
+			 */
+			create_routes_and_nodes?: (
+				config: ValidatedConfig,
+				cwd: string,
+				fallback: string
+			) => { nodes: PageNode[]; routes: RouteData[] };
+
+			/**
+			 * Replaces the internal function that writes all type declarations on sync.init,
+			 * including route and endpoint types. Use this to change or intercept the output.
+			 *
+			 * If you are using this, you likely need to also override write_types
+			 */
+			write_all_types?: (config: ValidatedConfig, manifest_data: ManifestData) => void;
+
+			/**
+			 * Replaces the internal function that writes a single type declaration file when its
+			 * content is updated. Not called on deletion or creation (or at least not supposed to be).
+			 *
+			 * If you are using this, you likely will also want to override write_all_types
+			 */
+			write_types?: (config: ValidatedConfig, manifest_data: ManifestData, file: string) => void;
+		};
+		/**
 		 * Inline CSS inside a `<style>` block at the head of the HTML. This option is a number that specifies the maximum length of a CSS file in UTF-16 code units, as specified by the [String.length](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/length) property, to be inlined. All CSS files needed for the page and smaller than this value are merged and inlined in a `<style>` block.
 		 *
 		 * > [!NOTE] This results in fewer initial requests and can improve your [First Contentful Paint](https://web.dev/first-contentful-paint) score. However, it generates larger HTML output and reduces the effectiveness of browser caches. Use it advisedly.
@@ -1631,7 +1668,7 @@ declare module '@sveltejs/kit' {
 		info(msg: string): void;
 	}
 
-	type MaybePromise<T> = T | Promise<T>;
+	export type MaybePromise<T> = T | Promise<T>;
 
 	interface Prerendered {
 		/**
@@ -1707,7 +1744,7 @@ declare module '@sveltejs/kit' {
 		rest: boolean;
 	}
 
-	type TrailingSlash = 'never' | 'always' | 'ignore';
+	export type TrailingSlash = 'never' | 'always' | 'ignore';
 	interface Asset {
 		file: string;
 		size: number;
@@ -1757,7 +1794,7 @@ declare module '@sveltejs/kit' {
 		server_manifest: import('vite').Manifest;
 	}
 
-	interface ManifestData {
+	export interface ManifestData {
 		/** Static files from `kit.config.files.assets`. */
 		assets: Asset[];
 		hooks: {
@@ -1770,7 +1807,7 @@ declare module '@sveltejs/kit' {
 		matchers: Record<string, string>;
 	}
 
-	interface PageNode {
+	export interface PageNode {
 		depth: number;
 		/** The `+page/layout.svelte`. */
 		component?: string; // TODO supply default component if it's missing (bit of an edge case)
@@ -1793,7 +1830,7 @@ declare module '@sveltejs/kit' {
 			: T[K]; // Use the exact type for everything else
 	};
 
-	interface RouteParam {
+	export interface RouteParam {
 		name: string;
 		matcher: string;
 		optional: boolean;
@@ -1806,7 +1843,7 @@ declare module '@sveltejs/kit' {
 	 * with only layout/error pages, or a leaf, at which point either `page` and `leaf`
 	 * or `endpoint` is set.
 	 */
-	interface RouteData {
+	export interface RouteData {
 		id: string;
 		parent: RouteData | null;
 
@@ -1845,9 +1882,9 @@ declare module '@sveltejs/kit' {
 		};
 	}
 
-	type SSRComponentLoader = () => Promise<SSRComponent>;
+	export type SSRComponentLoader = () => Promise<SSRComponent>;
 
-	interface UniversalNode {
+	export interface UniversalNode {
 		load?: Load;
 		prerender?: PrerenderOption;
 		ssr?: boolean;
@@ -1899,7 +1936,7 @@ declare module '@sveltejs/kit' {
 		leaf: number;
 	}
 
-	type PrerenderEntryGenerator = () => MaybePromise<Array<Record<string, string>>>;
+	export type PrerenderEntryGenerator = () => MaybePromise<Array<Record<string, string>>>;
 
 	type SSREndpoint = Partial<Record<HttpMethod, RequestHandler>> & {
 		prerender?: PrerenderOption;
@@ -1927,7 +1964,7 @@ declare module '@sveltejs/kit' {
 		leaf: [has_server_load: boolean, node_id: number];
 	}
 
-	type ValidatedConfig = Config & {
+	export type ValidatedConfig = Config & {
 		kit: ValidatedKitConfig;
 		extensions: string[];
 	};
@@ -1935,6 +1972,27 @@ declare module '@sveltejs/kit' {
 	type ValidatedKitConfig = Omit<RecursiveRequired<KitConfig>, 'adapter'> & {
 		adapter?: Adapter;
 	};
+	interface RouteComponent {
+		kind: 'component';
+		is_page: boolean;
+		is_layout: boolean;
+		is_error: boolean;
+		uses_layout: string | undefined;
+	}
+
+	interface RouteSharedModule {
+		kind: 'universal';
+		is_page: boolean;
+		is_layout: boolean;
+	}
+
+	interface RouteServerModule {
+		kind: 'server';
+		is_page: boolean;
+		is_layout: boolean;
+	}
+
+	export type RouteFile = RouteComponent | RouteSharedModule | RouteServerModule;
 	/**
 	 * Throws an error with a HTTP status code and an optional message.
 	 * When called during request handling, this will cause SvelteKit to
@@ -2049,7 +2107,7 @@ declare module '@sveltejs/kit' {
 	class Redirect_1 {
 		
 		constructor(status: 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308, location: string);
-		status: 301 | 302 | 303 | 307 | 308 | 300 | 304 | 305 | 306;
+		status: 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308;
 		location: string;
 	}
 

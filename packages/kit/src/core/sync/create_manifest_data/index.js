@@ -26,7 +26,11 @@ export default function create_manifest_data({
 	const assets = create_assets(config);
 	const hooks = create_hooks(config, cwd);
 	const matchers = create_matchers(config, cwd);
-	const { nodes, routes } = create_routes_and_nodes(cwd, config, fallback);
+	const { nodes, routes } = config.kit.route_function_overrides.create_routes_and_nodes(
+		config,
+		cwd,
+		fallback
+	);
 
 	for (const route of routes) {
 		for (const param of route.params) {
@@ -115,7 +119,7 @@ function create_matchers(config, cwd) {
  * @param {string} cwd
  * @param {string} fallback
  */
-function create_routes_and_nodes(cwd, config, fallback) {
+export function create_routes_and_nodes(config, cwd, fallback) {
 	/** @type {import('types').RouteData[]} */
 	const routes = [];
 

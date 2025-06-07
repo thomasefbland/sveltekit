@@ -1,5 +1,7 @@
 import { join } from 'node:path';
 import process from 'node:process';
+import { default_write_all_types, default_write_types } from '../sync/write_types/index.js';
+import { create_routes_and_nodes } from '../sync/create_manifest_data/index.js';
 
 /** @typedef {import('./types.js').Validator} Validator */
 
@@ -133,6 +135,12 @@ const options = object(
 				serviceWorker: string(join('src', 'service-worker')),
 				appTemplate: string(join('src', 'app.html')),
 				errorTemplate: string(join('src', 'error.html'))
+			}),
+
+			route_function_overrides: object({
+				create_routes_and_nodes: fun(create_routes_and_nodes),
+				write_all_types: fun(default_write_all_types),
+				write_types: fun(default_write_types)
 			}),
 
 			inlineStyleThreshold: number(0),
