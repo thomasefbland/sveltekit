@@ -343,6 +343,7 @@ function kit({ svelte_config }) {
 
 				const allow = new Set([
 					kit.files.routes,
+					kit.files.apps,
 					kit.files.src,
 					kit.outDir,
 					path.resolve(root, kit.files.src),
@@ -410,7 +411,9 @@ function kit({ svelte_config }) {
 					optimizeDeps: {
 						entries: [
 							`${kit.files.routes}/**/+*.{svelte,js,ts}`,
-							`!${kit.files.routes}/**/+*server.*`
+							`${kit.files.apps}/**/+*.{svelte,js,ts}`,
+							`!${kit.files.routes}/**/+*server.*`,
+							`!${kit.files.apps}/**/+*server.*`
 						],
 						exclude: [
 							// Without this SvelteKit will be prebundled on the client, which means we end up with two versions of Redirect etc.

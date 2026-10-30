@@ -44,6 +44,96 @@ export function adapter_read_unsupported(_values, options) {
 }
 
 /**
+ * `%file%` declares permissions, but `%app%` has no `@permissions` module
+ * @param {{ "file": string; "app": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_access_without_permissions(_values, options) {
+	throw_error('app_access_without_permissions', `\`${_values.file}\` declares permissions, but \`${_values.app}\` has no \`@permissions\` module`, options, app_access_without_permissions);
+}
+
+/**
+ * `%file%` is not allowed in an `api` directory
+ * @param {{ "file": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_api_file_not_allowed(_values, options) {
+	throw_error('app_api_file_not_allowed', `\`${_values.file}\` is not allowed in an \`api\` directory`, options, app_api_file_not_allowed);
+}
+
+/**
+ * `%file%` cannot be prerendered, because it lives in an `api` directory
+ * @param {{ "file": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_api_prerender(_values, options) {
+	throw_error('app_api_prerender', `\`${_values.file}\` cannot be prerendered, because it lives in an \`api\` directory`, options, app_api_prerender);
+}
+
+/**
+ * `%file%` is a global layout, but only `src/apps/@root` can define one
+ * @param {{ "file": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_global_layout_not_root(_values, options) {
+	throw_error('app_global_layout_not_root', `\`${_values.file}\` is a global layout, but only \`src/apps/@root\` can define one`, options, app_global_layout_not_root);
+}
+
+/**
+ * `%app%` has neither a `views` nor an `api` directory in `%directory%`
+ * @param {{ "app": string; "directory": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_no_route_directory(_values, options) {
+	throw_error('app_no_route_directory', `\`${_values.app}\` has neither a \`views\` nor an \`api\` directory in \`${_values.directory}\``, options, app_no_route_directory);
+}
+
+/**
+ * `%id%` cannot have both a `+page` and `%file%`
+ * @param {{ "id": string; "file": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_page_and_endpoint(_values, options) {
+	throw_error('app_page_and_endpoint', `\`${_values.id}\` cannot have both a \`+page\` and \`${_values.file}\``, options, app_page_and_endpoint);
+}
+
+/**
+ * `%id%` cannot be prerendered, because `%file%` declares permissions for it
+ * @param {{ "id": string; "file": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_permissions_prerender(_values, options) {
+	throw_error('app_permissions_prerender', `\`${_values.id}\` cannot be prerendered, because \`${_values.file}\` declares permissions for it`, options, app_permissions_prerender);
+}
+
+/**
+ * `%first%` and `%second%` both resolve to the prefix `%prefix%`
+ * @param {{ "first": string; "second": string; "prefix": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_prefix_duplicate(_values, options) {
+	throw_error('app_prefix_duplicate', `\`${_values.first}\` and \`${_values.second}\` both resolve to the prefix \`${_values.prefix}\``, options, app_prefix_duplicate);
+}
+
+/**
+ * `%app%` conflicts with `%reserved%`, which is exposed as `apps.root`
+ * @param {{ "app": string; "reserved": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function app_root_name_reserved(_values, options) {
+	throw_error('app_root_name_reserved', `\`${_values.app}\` conflicts with \`${_values.reserved}\`, which is exposed as \`apps.root\``, options, app_root_name_reserved);
+}
+
+/**
  * %file% does not exist
  * @param {{ "file": string }} _values
  * @param {ThrowOptions} [options]
@@ -61,6 +151,16 @@ export function app_template_missing(_values, options) {
  */
 export function app_template_tag_missing(_values, options) {
 	throw_error('app_template_tag_missing', `${_values.file} is missing \`${_values.tag}\``, options, app_template_tag_missing);
+}
+
+/**
+ * No routes found in `%directory%`
+ * @param {{ "directory": string }} _values
+ * @param {ThrowOptions} [options]
+ * @returns {never}
+ */
+export function apps_no_routes(_values, options) {
+	throw_error('apps_no_routes', `No routes found in \`${_values.directory}\``, options, apps_no_routes);
 }
 
 /**

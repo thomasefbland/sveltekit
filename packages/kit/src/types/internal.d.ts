@@ -205,6 +205,38 @@ export interface InternalRequestOptions extends RequestOptions {
 	emulator?: Emulator;
 }
 
+/** The origin a mount's routes are served from. */
+export type MountTree = 'views' | 'api';
+
+/**
+ * A single `src/apps/<App>/{views,api}` directory. Every route discovered inside a mount is
+ * served from that mount's tree, under that mount's prefix.
+ */
+export interface AppMount {
+	/** The app directory name, e.g. `@root` or `Cheque_Parser`. */
+	app: string;
+	tree: MountTree;
+	/** The URL prefix shared by every route in this mount — `''` for `@root`. */
+	prefix: string;
+	/** The prefix baked into every `route.id` in this mount. Equal to `prefix`, except on the `api` tree. */
+	id_prefix: string;
+	/** Absolute path to the mount directory. */
+	dir: string;
+	/** The mount directory, relative to the project root and posixified. Used in error messages. */
+	base: string;
+}
+
+/**
+ * An app's `@permissions` module, which declares the permissions that app can require. Every
+ * requirement declared in a `+access` module is expanded against this vocabulary.
+ */
+export interface AppPermissions {
+	/** The app directory name, e.g. `@root` or `Cheque_Parser`. */
+	app: string;
+	/** The `@permissions` module, relative to the project root and posixified. */
+	file: string;
+}
+
 export interface ManifestData {
 	/** Static files from `config.files.assets`. */
 	assets: Asset[];
@@ -216,6 +248,16 @@ export interface ManifestData {
 	nodes: PageNode[];
 	routes: RouteData[];
 	params: string | null;
+	/** Every `src/apps/<App>/{views,api}` directory. Empty when using `files.routes`. */
+	mounts: AppMount[];
+	/** Every app's `@permissions` module, in mount order. Empty when using `files.routes`. */
+	permissions: AppPermissions[];
+	/** `src/apps/@root/@layout.*`, which wraps every page in every app on both trees. */
+	root_layout: PageNode | null;
+	/** The directory `root_layout` lives in, relative to the project root and posixified. */
+	root_layout_dir: string | null;
+	/** `config.router.api_host`, or `null` to infer the API host from the `api.` prefix. */
+	api_host: string | null;
 }
 
 export interface RemoteChunk {
@@ -235,6 +277,8 @@ export interface PageNode {
 	parent?: PageNode;
 	/** Filled with the pages that reference this layout (if this is a layout). */
 	child_pages?: PageNode[];
+	/** True for `src/apps/@root/@layout.*`, which is the root layout of every app. */
+	global?: boolean;
 	/** The final page options for a node if it was statically analysable */
 	page_options?: PageOptions | null;
 }
@@ -283,6 +327,11 @@ export interface RouteParam {
  */
 export interface RouteData {
 	id: string;
+	/** The route's directory, relative to the project root and posixified. */
+	dir: string;
+	tree: MountTree;
+	/** The app directory name this route belongs to, e.g. `@root` or `Cheque_Parser`. */
+	app: string;
 	parent: RouteData | null;
 
 	segment: string;
@@ -292,6 +341,9 @@ export interface RouteData {
 	layout: PageNode | null;
 	error: PageNode | null;
 	leaf: PageNode | null;
+
+	/** The route's `+access` module, which declares the permissions it requires. */
+	access: string | null;
 
 	page: {
 		layouts: Array<number | undefined>;
@@ -496,6 +548,11 @@ export interface SSRManifest {
 	prerendered_routes: Set<string>;
 	matchers: () => Promise<Record<string, ParamMatcher>>;
 	/**
+	 * The hostname serving the `api` tree, or `null` to treat any hostname starting with `api.`
+	 * as the API origin.
+	 */
+	api_host: string | null;
+	/**
 	 * A `[file]: size` map of all assets imported by server code.
 	 */
 	server_assets: Record<string, number>;
@@ -570,6 +627,7 @@ export type SSREndpoint = Partial<Record<HttpMethod, RequestHandler>> & {
 
 export interface SSRRoute {
 	id: string;
+	tree: MountTree;
 	pattern: RegExp;
 	params: RouteParam[];
 	page: PageNodeIndexes | null;
