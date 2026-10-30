@@ -200,6 +200,7 @@ export async function dev(
 		vite_dev_server.watcher.on(event, (file) => {
 			if (
 				file.startsWith(svelte_config.files.routes + path.sep) ||
+				file.startsWith(svelte_config.files.apps + path.sep) ||
 				file.startsWith(svelte_config.files.assets + path.sep) ||
 				(params_file && file === params_file) ||
 				is_remote_module(file) ||

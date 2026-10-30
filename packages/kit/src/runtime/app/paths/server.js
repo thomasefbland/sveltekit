@@ -4,6 +4,7 @@ import { decode_pathname } from '../../../utils/url.js';
 import { add_data_suffix } from '../../../pathname.js';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import { manifest } from '../../server/internal.js';
+import { routes_for } from '../../server/routes_for.js';
 import { get_hooks } from '<sveltekit:generated>/server.js';
 import { DEV } from 'esm-env';
 import * as e from '../../../messages/shared-errors.js';
@@ -86,7 +87,7 @@ export async function match(url) {
 	}
 
 	const matchers = await manifest.matchers();
-	const result = find_route(resolved_path, manifest.routes, matchers);
+	const result = find_route(resolved_path, routes_for(url.hostname, manifest), matchers);
 
 	if (result) {
 		return {

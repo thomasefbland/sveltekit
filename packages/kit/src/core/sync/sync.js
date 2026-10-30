@@ -13,6 +13,7 @@ import {
 import { load_explicit_env } from '../env.js';
 import { write_env } from './write_env.js';
 import { write_app_manifest } from './write_app_manifest.js';
+import { write_app_apps, write_app_apps_types } from './write_app_apps.js';
 
 /**
  * Update SvelteKit's generated files
@@ -25,10 +26,12 @@ export function create(config, root, manifest_data, is_build) {
 	const output = path.join(config.outDir, `generated/${is_build ? 'build' : 'dev'}`);
 
 	write_app_manifest(output, manifest_data, is_build);
+	write_app_apps(output, manifest_data, root);
 	write_client_manifest(config, manifest_data, `${output}/client`, root);
 	write_server(config, output, root);
 	write_all_types(config, manifest_data, root);
 	write_app_types(config, manifest_data, root);
+	write_app_apps_types(manifest_data, root);
 }
 
 /**
@@ -91,6 +94,7 @@ export function all_types(config, root) {
 	const manifest_data = create_manifest_data(config, root);
 	write_all_types(config, manifest_data, root);
 	write_app_types(config, manifest_data, root);
+	write_app_apps_types(manifest_data, root);
 }
 
 /**

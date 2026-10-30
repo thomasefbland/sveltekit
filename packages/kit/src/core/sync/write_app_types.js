@@ -252,9 +252,12 @@ function generate_app_types(manifest_data, config, dir) {
 			serialise = (p) => `\`${p}\` & {}`;
 		}
 
-		for (const pathname of get_pathname_patterns(route.id)) {
-			for (const p of get_pathnames_for_trailing_slash(pathname, route)) {
-				pathnames.add(serialise(p));
+		// API routes live on a different origin, so they are never valid `href`/`resolve` targets
+		if (route.tree !== 'api') {
+			for (const pathname of get_pathname_patterns(route.id)) {
+				for (const p of get_pathnames_for_trailing_slash(pathname, route)) {
+					pathnames.add(serialise(p));
+				}
 			}
 		}
 

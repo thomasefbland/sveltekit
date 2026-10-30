@@ -106,6 +106,7 @@ const get_defaults = (prefix = '') => ({
 		},
 		params: join(prefix, 'src/params'),
 		routes: join(prefix, 'src/routes'),
+		apps: join(prefix, 'src/apps'),
 		serviceWorker: join(prefix, 'src/service-worker'),
 		appTemplate: join(prefix, 'src/app.html'),
 		errorTemplate: join(prefix, 'src/error.html')
@@ -116,7 +117,8 @@ const get_defaults = (prefix = '') => ({
 	outDir: join(prefix, '.svelte-kit'),
 	router: {
 		type: 'pathname',
-		resolution: 'client'
+		resolution: 'client',
+		api_host: null
 	},
 	serviceWorker: {
 		options: undefined,

@@ -182,6 +182,7 @@ export function generate_manifest(
 
 				return {
 					id: route.id,
+					tree: route.tree,
 					pattern: route.pattern,
 					params: route.params,
 					page: route.page,
@@ -195,6 +196,7 @@ export function generate_manifest(
 				};
 			})
 		),
+		api_host: manifest_data.api_host,
 		matchers: async () => {
 			if (!manifest_data.params) return {};
 

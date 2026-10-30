@@ -124,6 +124,7 @@ export function generate_manifest({
 					return dedent`
 						{
 							id: ${s(route.id)},
+							tree: ${s(route.tree)},
 							pattern: ${route.pattern},
 							params: ${s(route.params)},
 							page: ${route.page ? `{ layouts: ${get_nodes(route.page.layouts)}, errors: ${get_nodes(route.page.errors)}, leaf: ${reindexed.get(route.page.leaf)} }` : 'null'},
@@ -132,6 +133,7 @@ export function generate_manifest({
 					`;
 				}).filter(Boolean).join(',\n')}
 			],
+			api_host: ${s(build_data.manifest_data.api_host)},
 			prerendered_routes: new Set(${s(prerendered)}),
 			matchers: async () => {
 				${
