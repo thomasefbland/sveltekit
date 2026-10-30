@@ -14,6 +14,7 @@ import { render_page } from './page/index.js';
 import { render_response } from './page/render.js';
 import { get_self_origin, is_csrf_forbidden, is_remote_forbidden } from './csrf.js';
 import { has_prerendered_path, method_not_allowed, redirect_response } from './utils.js';
+import { routes_for } from './routes_for.js';
 import {
 	decode_pathname,
 	disable_search,
@@ -374,7 +375,7 @@ export async function internal_respond(request, state) {
 	if (!state.prerendering?.fallback && !skip_route_resolution) {
 		try {
 			const matchers = await manifest.matchers();
-			const result = find_route(resolved_path, manifest.routes, matchers);
+			const result = find_route(resolved_path, routes_for(url.hostname, manifest), matchers);
 
 			if (result) {
 				route = result.route;

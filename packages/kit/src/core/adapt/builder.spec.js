@@ -22,6 +22,11 @@ function create_test_builder(outDir, assets = []) {
 				nodes: [],
 				hooks: { client: null, server: null, universal: null },
 				routes: [],
+				mounts: [],
+				permissions: [],
+				root_layout: null,
+				root_layout_dir: null,
+				api_host: null,
 				params: ''
 			},
 			server_manifest: {}

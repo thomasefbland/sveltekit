@@ -68,13 +68,17 @@ export function set_hooks(value) {
 /**
  * @param {number} status
  * @param {Request} request
+ * @param {boolean} [apps] Whether the project uses `src/apps`, in which case the same pathname can
+ *   exist on two origins and the hostname is needed to tell the two apart in logs
  * @returns {string}
  */
-export function format_response(status, request) {
+export function format_response(status, request, apps = false) {
 	const url = new URL(request.url);
 	const requested = url.href.replace(url.origin, '');
 
 	let log = `${styleText(status < 400 ? ['cyan'] : ['bold', 'red'], `${status}`)} ${request.method} `;
+
+	if (apps) log += styleText('dim', url.hostname);
 
 	if (has_data_suffix(url.pathname)) {
 		const pathname = strip_data_suffix(url.pathname) || '/';

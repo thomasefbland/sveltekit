@@ -13,6 +13,20 @@ test('formats a plain page request', () => {
 	).toBe('200 GET /');
 });
 
+test('includes the hostname in apps mode, where two origins share pathnames', () => {
+	expect(
+		stripVTControlCharacters(
+			format_response(200, new Request('http://api.localhost:5173/cheque-parser/ping'), true)
+		)
+	).toBe('200 GET api.localhost/cheque-parser/ping');
+
+	expect(
+		stripVTControlCharacters(
+			format_response(404, new Request('http://localhost:5173/cheque-parser/ping'), true)
+		)
+	).toBe('404 GET localhost/cheque-parser/ping');
+});
+
 test('formats a request with a path', () => {
 	expect(
 		stripVTControlCharacters(format_response(200, new Request('http://localhost:5173/blog/hello')))

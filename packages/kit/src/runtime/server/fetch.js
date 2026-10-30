@@ -4,6 +4,7 @@ import { respond } from './respond.js';
 import * as paths from '#app/paths';
 import { hooks, manifest, read_implementation } from './internal.js';
 import { has_prerendered_path } from './utils.js';
+import { is_api_host } from './routes_for.js';
 import { fork_state_for_subrequest } from './state.js';
 
 /**
@@ -36,6 +37,11 @@ export function create_fetch({ event, state, get_cookie_header, set_internal }) 
 
 				const url = new URL(request.url);
 
+				// a request to the `api` tree is served by this same deployment, on another origin,
+				// so we handle it in-process rather than making a network request
+				const is_api_request =
+					url.origin !== event.url.origin && is_api_host(url.hostname, manifest.api_host ?? null);
+
 				if (!request.headers.has('origin')) {
 					request.headers.set('origin', event.url.origin);
 				}
@@ -55,11 +61,22 @@ export function create_fetch({ event, state, get_cookie_header, set_internal }) 
 					request.headers.delete('origin');
 				}
 
+				if (is_api_request) {
+					// the subrequest is served as though it originated on the `api` origin, which also
+					// means the CSRF check doesn't reject it as a cross-site form submission
+					if (request.method === 'GET' || request.method === 'HEAD') {
+						request.headers.delete('origin');
+					} else {
+						request.headers.set('origin', url.origin);
+					}
+				}
+
 				const decoded = decodeURIComponent(url.pathname);
 
 				if (
-					url.origin !== event.url.origin ||
-					(paths.base && decoded !== paths.base && !decoded.startsWith(`${paths.base}/`))
+					!is_api_request &&
+					(url.origin !== event.url.origin ||
+						(paths.base && decoded !== paths.base && !decoded.startsWith(`${paths.base}/`)))
 				) {
 					// Allow cookie passthrough for "credentials: same-origin" and "credentials: include"
 					// if SvelteKit is serving my.domain.com:
@@ -90,7 +107,7 @@ export function create_fetch({ event, state, get_cookie_header, set_internal }) 
 				const is_asset_html =
 					manifest.assets.has(filename_html) || filename_html in manifest.server_assets;
 
-				if (is_asset || is_asset_html) {
+				if (!is_api_request && (is_asset || is_asset_html)) {
 					const file = is_asset ? filename : filename_html;
 
 					if (state.read) {
@@ -117,7 +134,7 @@ export function create_fetch({ event, state, get_cookie_header, set_internal }) 
 					return await fetch(request, { redirect: 'manual' });
 				}
 
-				if (has_prerendered_path(decoded)) {
+				if (!is_api_request && has_prerendered_path(decoded)) {
 					// The path of something prerendered could match a different route
 					// that is still in the manifest, leading to the wrong route being loaded.
 					// We therefore bail early here. The prerendered logic is different for

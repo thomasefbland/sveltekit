@@ -117,7 +117,12 @@ test('requests a manifest rebuild if static analysis encounters a missing route 
 		hooks: { client: null, server: null, universal: null },
 		nodes: [{ depth: 0, server: 'missing/+page.server.js' }],
 		params: null,
-		routes: []
+		routes: [],
+		mounts: [],
+		permissions: [],
+		root_layout: null,
+		root_layout_dir: null,
+		api_host: null
 	});
 
 	const updated = update(
@@ -153,6 +158,9 @@ test('requests a manifest rebuild if type generation encounters a missing route 
 		routes: [
 			{
 				id: '/missing',
+				dir: 'src/routes/missing',
+				tree: 'views',
+				app: '@root',
 				parent: null,
 				segment: 'missing',
 				pattern: /^\/missing\/?$/,
@@ -160,10 +168,16 @@ test('requests a manifest rebuild if type generation encounters a missing route 
 				layout: null,
 				error: null,
 				leaf,
+				access: null,
 				page: { layouts: [], errors: [], leaf: 0 },
 				endpoint: null
 			}
-		]
+		],
+		mounts: [],
+		permissions: [],
+		root_layout: null,
+		root_layout_dir: null,
+		api_host: null
 	});
 
 	try {
