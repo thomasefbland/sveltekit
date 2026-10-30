@@ -38,3 +38,9 @@ declare module '<sveltekit:generated>/app-manifest.js' {
 	export const prerendered: Array<{ path: string }>;
 	export const routes: Array<{ id: string; page: boolean; endpoint: boolean }>;
 }
+
+/** Internal version of $app/apps */
+declare module '<sveltekit:generated>/app-apps.js' {
+	export const apps: Record<string, { permissions: Record<string, any> }>;
+	export function get_required_permissions(route_id: string | null): Set<string> | null;
+}

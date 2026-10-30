@@ -65,14 +65,18 @@ function stringify_assets(assets) {
  */
 export function get_manifest_routes(routes) {
 	return (
-		routes?.filter(is_app_route).map(
-			(route) =>
-				/** @type {ManifestRoute} */ ({
-					id: route.id,
-					page: is_page_route(route),
-					endpoint: is_endpoint_route(route)
-				})
-		) ?? []
+		routes
+			// routes on the `api` tree belong to another origin, so the client app can't navigate to
+			// them — and their ids are namespaced, which would leak the `/__api` prefix
+			?.filter((route) => is_app_route(route) && route.tree !== 'api')
+			.map(
+				(route) =>
+					/** @type {ManifestRoute} */ ({
+						id: route.id,
+						page: is_page_route(route),
+						endpoint: is_endpoint_route(route)
+					})
+			) ?? []
 	);
 }
 

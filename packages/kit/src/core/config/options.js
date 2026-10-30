@@ -141,6 +141,7 @@ const options = {
 		lib: removed(e.config_option_removed_files_lib),
 		params: string(null),
 		routes: string(null),
+		apps: string(null),
 		serviceWorker: string(null),
 		appTemplate: string(null),
 		errorTemplate: string(null)
@@ -253,7 +254,8 @@ const options = {
 
 	router: object({
 		type: list(['pathname', 'hash']),
-		resolution: list(['client', 'server'])
+		resolution: list(['client', 'server']),
+		api_host: string(null)
 	}),
 
 	serviceWorker: object({

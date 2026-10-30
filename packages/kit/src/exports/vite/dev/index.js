@@ -200,6 +200,7 @@ export async function dev(
 		vite_dev_server.watcher.on(event, (file) => {
 			if (
 				file.startsWith(svelte_config.files.routes + path.sep) ||
+				file.startsWith(svelte_config.files.apps + path.sep) ||
 				file.startsWith(svelte_config.files.assets + path.sep) ||
 				(params_file && file === params_file) ||
 				is_remote_module(file) ||
@@ -448,14 +449,16 @@ export async function dev(
 					emulator
 				});
 
+				const apps = !!manifest_data?.mounts.length;
+
 				if (rendered.status === 404) {
 					// @ts-expect-error
 					serve_static_middleware.handle(req, res, () => {
-						log_dev_response(rendered.status, format_response(rendered.status, request));
+						log_dev_response(rendered.status, format_response(rendered.status, request, apps));
 						(svelte_config.adapter?.vite?.setResponse ?? setResponse)(res, rendered);
 					});
 				} else {
-					log_dev_response(rendered.status, format_response(rendered.status, request));
+					log_dev_response(rendered.status, format_response(rendered.status, request, apps));
 					(svelte_config.adapter?.vite?.setResponse ?? setResponse)(res, rendered);
 				}
 			} catch (e) {
