@@ -6,8 +6,14 @@ import { compact } from '../../../utils/array.js';
 import { posixify } from '../../../utils/os.js';
 import { ts } from '../ts.js';
 import { is_page_route } from '../create_manifest_data/index.js';
-const remove_relative_parent_traversals = (/** @type {string} */ path) =>
-	path.replace(/\.\.\//g, '');
+
+/**
+ * The directory a route's `$types` module is written to, relative to `types/`. A route directory
+ * outside the project root (a custom `files.routes`) would otherwise escape the output directory.
+ * @param {string} dir
+ */
+const types_subdir = (dir) => dir.replace(/\.\.\//g, '');
+
 const is_whitespace = (/** @type {string} */ char) => /\s/.test(char);
 
 /**
@@ -38,12 +44,10 @@ export function write_all_types(config, manifest_data, root) {
 	const types_dir = `${config.outDir}/types`;
 
 	// empty out files that no longer need to exist
-	const routes_dir = remove_relative_parent_traversals(
-		posixify(path.relative(root, config.files.routes))
-	);
-	const expected_directories = new Set(
-		manifest_data.routes.map((route) => path.posix.join(routes_dir, route.id))
-	);
+	const expected_directories = new Set([
+		...manifest_data.routes.map((route) => types_subdir(route.dir)),
+		...(manifest_data.root_layout_dir ? [types_subdir(manifest_data.root_layout_dir)] : [])
+	]);
 
 	if (fs.existsSync(types_dir)) {
 		for (const file of walk(types_dir)) {
@@ -66,7 +70,7 @@ export function write_all_types(config, manifest_data, root) {
 	for (const route of manifest_data.routes) {
 		if (!route.leaf && !route.layout && !route.endpoint) continue; // nothing to do
 
-		const outdir = path.join(config.outDir, 'types', routes_dir, route.id);
+		const outdir = path.join(config.outDir, 'types', types_subdir(route.dir));
 
 		// check if the types are out of date
 		/** @type {string[]} */
@@ -136,6 +140,10 @@ export function write_all_types(config, manifest_data, root) {
 		if (!current_route_ids.has(id)) delete meta_data[id];
 	}
 
+	// `src/apps/@root/@layout.*` isn't a route, so it has no entry in `manifest_data.routes`,
+	// but its `load` functions still need a `$types` module
+	update_root_layout_types(config, manifest_data, routes_map, root);
+
 	fs.writeFileSync(meta_data_file, JSON.stringify(meta_data, null, '\t'));
 }
 
@@ -150,18 +158,59 @@ export function write_all_types(config, manifest_data, root) {
 export function write_types(config, manifest_data, file, root) {
 	if (!ts) return;
 
-	if (!path.basename(file).startsWith('+')) {
+	const name = path.basename(file);
+
+	if (name.startsWith('@layout')) {
+		update_root_layout_types(config, manifest_data, create_routes_map(manifest_data), root);
+		return;
+	}
+
+	if (!name.startsWith('+')) {
 		// Not a route file
 		return;
 	}
 
-	const id = '/' + posixify(path.relative(config.files.routes, path.dirname(file)));
-
-	const route = manifest_data.routes.find((route) => route.id === id);
+	const route = manifest_data.routes.find(
+		(route) => route.dir === posixify(path.relative(root, path.dirname(file)))
+	);
 	if (!route) return;
 	if (!route.leaf && !route.layout && !route.endpoint) return; // nothing to do
 
 	update_types(config, create_routes_map(manifest_data), route, root);
+}
+
+/**
+ * `src/apps/@root/@layout.*` isn't a route, so it has no entry in `manifest_data.routes`. Reuse
+ * the route generator by synthesising a layout-only route rooted at the app directory.
+ * @param {import('types').ValidatedConfig} config
+ * @param {import('types').ManifestData} manifest_data
+ * @param {RoutesMap} routes_map
+ * @param {string} root The project root directory
+ */
+function update_root_layout_types(config, manifest_data, routes_map, root) {
+	if (!manifest_data.root_layout || !manifest_data.root_layout_dir) return;
+
+	/** @type {import('types').RouteData} */
+	const synthetic = {
+		// `/` makes `LayoutRouteId` include `null`, which it needs because this layout also
+		// renders the fallback error page
+		id: '/',
+		dir: manifest_data.root_layout_dir,
+		tree: 'views',
+		app: '@root',
+		parent: null,
+		segment: '',
+		pattern: /$^/,
+		params: [],
+		layout: manifest_data.root_layout,
+		error: null,
+		leaf: null,
+		access: null,
+		page: null,
+		endpoint: null
+	};
+
+	update_types(config, routes_map, synthetic, root);
 }
 
 /**
@@ -188,10 +237,7 @@ function create_routes_map(manifest_data) {
  * @param {Set<string>} [to_delete]
  */
 function update_types(config, routes, route, root, to_delete = new Set()) {
-	const routes_dir = remove_relative_parent_traversals(
-		posixify(path.relative(root, config.files.routes))
-	);
-	const outdir = path.join(config.outDir, 'types', routes_dir, route.id);
+	const outdir = path.join(config.outDir, 'types', types_subdir(route.dir));
 
 	// now generate new types
 	const imports = [
@@ -261,7 +307,7 @@ function update_types(config, routes, route, root, to_delete = new Set()) {
 			declarations: d,
 			exports: e,
 			proxies
-		} = process_node(route.leaf, outdir, true, route_info.proxies, root);
+		} = process_node(route.leaf, outdir, true, route_info.proxies, root, route.dir);
 
 		exports.push(...e);
 		declarations.push(...d);
@@ -342,6 +388,7 @@ function update_types(config, routes, route, root, to_delete = new Set()) {
 			false,
 			{ server: null, universal: null },
 			root,
+			route.dir,
 			all_pages_have_load
 		);
 
@@ -382,9 +429,10 @@ function update_types(config, routes, route, root, to_delete = new Set()) {
  * @param {boolean} is_page
  * @param {Proxies} proxies
  * @param {string} root The project root directory
+ * @param {string} route_dir The route's directory, relative to `root` and posixified
  * @param {boolean} [all_pages_have_load]
  */
-function process_node(node, outdir, is_page, proxies, root, all_pages_have_load = true) {
+function process_node(node, outdir, is_page, proxies, root, route_dir, all_pages_have_load = true) {
 	const params = `${is_page ? 'Route' : 'Layout'}Params`;
 	const prefix = is_page ? 'Page' : 'Layout';
 
@@ -413,7 +461,9 @@ function process_node(node, outdir, is_page, proxies, root, all_pages_have_load 
 
 		const parent_type = `${prefix}ServerParentData`;
 
-		declarations.push(`type ${parent_type} = ${get_parent_type(node, 'LayoutServerData')};`);
+		declarations.push(
+			`type ${parent_type} = ${get_parent_type(node, 'LayoutServerData', route_dir)};`
+		);
 
 		// +page.js load present -> server can return all-optional data
 		const output_data_shape =
@@ -454,7 +504,7 @@ function process_node(node, outdir, is_page, proxies, root, all_pages_have_load 
 	exports.push(`export type ${prefix}ServerData = ${server_data};`);
 
 	const parent_type = `${prefix}ParentData`;
-	declarations.push(`type ${parent_type} = ${get_parent_type(node, 'LayoutData')};`);
+	declarations.push(`type ${parent_type} = ${get_parent_type(node, 'LayoutData', route_dir)};`);
 
 	if (node.universal) {
 		const proxy = proxies.universal;
@@ -554,20 +604,36 @@ function createProxy(file_path, is_server, root) {
 
 /**
  * Get the parent type string by recursively looking up the parent layout and accumulate them to one type.
+ *
+ * Each route's `$types` module lives in a directory that mirrors the route, so a parent `n`
+ * levels up is `'../'.repeat(n)` away. The one exception is the global `@layout` in
+ * `src/apps/@root`, which sits outside every app's tree — its module is found by mirroring the
+ * source tree instead.
+ *
  * @param {import('types').PageNode} node
  * @param {string} type
+ * @param {string} route_dir The route's directory, relative to the project root and posixified
  */
-function get_parent_type(node, type) {
+function get_parent_type(node, type, route_dir) {
 	const parent_imports = [];
 
 	let parent = node.parent;
 
 	while (parent) {
-		const d = node.depth - parent.depth;
+		/** @type {string} */
+		let reference;
+
+		if (parent.global) {
+			const file = /** @type {string} */ (parent.component ?? parent.universal ?? parent.server);
+			const relative = path.posix.relative(route_dir, path.posix.dirname(file));
+			reference = `import('${relative}/$types.js').${type}`;
+		} else {
+			const d = node.depth - parent.depth;
+			reference = `${d === 0 ? '' : `import('${'../'.repeat(d)}${'$types.js'}').`}${type}`;
+		}
+
 		// unshift because we need it the other way round for the import string
-		parent_imports.unshift(
-			`${d === 0 ? '' : `import('${'../'.repeat(d)}${'$types.js'}').`}${type}`
-		);
+		parent_imports.unshift(reference);
 		parent = parent.parent;
 	}
 

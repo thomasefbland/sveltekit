@@ -204,6 +204,21 @@ export interface Config extends VitePluginSvelteOptions {
 		 */
 		routes?: string;
 		/**
+		 * The directory containing your apps, for projects that split routes across multiple origins.
+		 *
+		 * Each app is a directory containing a `views` directory (served from your main origin), an
+		 * `api` directory (served from the API origin), or both. `src/apps/@root` is the default app:
+		 * it owns the unprefixed routes, and its `@layout.svelte`, `@layout.js` and
+		 * `@layout.server.js` files wrap every page in every app. Any other app is served under a
+		 * prefix derived from its directory name — `ChequeParser` from `/chequeparser`,
+		 * `Cheque_Parser` from `/cheque-parser`.
+		 *
+		 * When this directory exists, `files.routes` is ignored.
+		 *
+		 * @since 3.2.0
+		 */
+		apps?: string;
+		/**
 		 * The location of your service worker's entry point (see [Service workers](https://svelte.dev/docs/kit/service-workers)).
 		 * @deprecated this feature is still supported, but it's generally recommended to use [monorepos](https://levelup.video/tutorials/monorepos-with-pnpm) instead
 		 * @default "src/service-worker"
@@ -488,6 +503,18 @@ export interface Config extends VitePluginSvelteOptions {
 		 * @since 2.17.0
 		 */
 		resolution?: 'client' | 'server';
+		/**
+		 * The hostname that serves the `api` tree, for projects using `src/apps`.
+		 *
+		 * A project with a `src/apps` directory is a single deployment serving both your main
+		 * origin and your API origin, so the request's hostname decides which set of routes is
+		 * matched. By default, any hostname starting with `api.` — including `api.localhost` in
+		 * development — is treated as the API origin, which keeps preview deployments working
+		 * without configuration. Set this if your API origin uses a different naming scheme.
+		 *
+		 * @since 3.2.0
+		 */
+		api_host?: string;
 	};
 	serviceWorker?:
 		| {

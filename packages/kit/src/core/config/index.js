@@ -179,6 +179,7 @@ export function validate_config(config) {
 		files.hooks.universal ??= path.join(files.src, 'hooks');
 		files.params ??= path.join(files.src, 'params');
 		files.routes ??= path.join(files.src, 'routes');
+		files.apps ??= path.join(files.src, 'apps');
 		files.serviceWorker ??= path.join(files.src, 'service-worker');
 		files.appTemplate ??= path.join(files.src, 'app.html');
 		files.errorTemplate ??= path.join(files.src, 'error.html');
