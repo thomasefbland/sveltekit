@@ -10,6 +10,7 @@ import * as e from '../../../messages/build-errors.js';
 import * as w from '../../../messages/build-warnings.js';
 import { prevent_conflicts } from './conflict.js';
 import { sort_routes } from './sort.js';
+import { create_mounts } from './mounts.js';
 import {
 	create_node_analyser,
 	get_page_options
@@ -35,14 +36,20 @@ export default function create_manifest_data(
 	const assets = create_assets(config);
 	const hooks = create_hooks(config, root);
 	const params = resolve_params(config, root);
-	const { nodes, routes } = create_routes_and_nodes(root, config, fallback);
+	const { nodes, routes, mounts, permissions, root_layout, root_layout_dir } =
+		create_routes_and_nodes(root, config, fallback);
 
 	return {
 		assets,
 		hooks,
 		params,
 		nodes,
-		routes
+		routes,
+		mounts,
+		permissions,
+		root_layout,
+		root_layout_dir,
+		api_host: config.router.api_host
 	};
 }
 
@@ -121,22 +128,107 @@ function create_routes_and_nodes(cwd, config, fallback) {
 	/** @type {import('types').RouteData[]} */
 	let routes = [];
 
-	const routes_base = posixify(path.relative(cwd, config.files.routes));
-
 	const valid_extensions = [...config.extensions, ...config.moduleExtensions];
 
 	/** @type {import('types').PageNode[]} */
 	const nodes = [];
 
-	// create route data by processing files in `src/routes`
-	if (fs.existsSync(config.files.routes)) {
+	const apps_dir = config.files.apps ? path.resolve(cwd, config.files.apps) : null;
+	const use_apps = !!apps_dir && fs.existsSync(apps_dir);
+
+	/**
+	 * In `apps` mode every `src/apps/<App>/{views,api}` directory is its own mount, and every mount
+	 * is walked with `parent = null` — layout isolation is the default rather than something you
+	 * opt into. In legacy mode there's a single mount backed by `files.routes`.
+	 * @type {import('types').AppMount[]}
+	 */
+	const mounts = use_apps
+		? create_mounts(/** @type {string} */ (apps_dir), cwd)
+		: [
+				{
+					app: '@root',
+					tree: 'views',
+					prefix: '',
+					id_prefix: '',
+					dir: config.files.routes,
+					base: posixify(path.relative(cwd, config.files.routes))
+				}
+			];
+
+	/**
+	 * `src/apps/@root/@layout.*`, which wraps every page in every app, on both trees.
+	 * @type {import('types').PageNode | null}
+	 */
+	let root_layout = null;
+
+	/** @type {string | null} */
+	let root_layout_dir = null;
+
+	/** @type {import('types').PageNode | null} */
+	let root_error = null;
+
+	if (use_apps) {
+		const app_root = path.join(/** @type {string} */ (apps_dir), '@root');
+
+		const component = resolve_entry(path.join(app_root, '@layout'), config.extensions);
+		const universal = resolve_entry(path.join(app_root, '@layout'), config.moduleExtensions);
+		const server = resolve_entry(path.join(app_root, '@layout.server'), config.moduleExtensions);
+
+		root_layout_dir = posixify(path.relative(cwd, app_root));
+		root_layout = {
+			depth: 0,
+			component: posixify(path.relative(cwd, component ?? `${fallback}/layout.svelte`)),
+			global: true,
+			child_pages: []
+		};
+
+		if (universal) root_layout.universal = posixify(path.relative(cwd, universal));
+		if (server) root_layout.server = posixify(path.relative(cwd, server));
+	}
+
+	/**
+	 * Every app's `@permissions` module. It is not inside a `views`/`api` directory, so the walker
+	 * never sees it — it's resolved from the app directory itself.
+	 * @type {import('types').AppPermissions[]}
+	 */
+	const permissions = [];
+
+	if (use_apps) {
+		/** @type {Set<string>} */
+		const seen = new Set();
+
+		for (const mount of mounts) {
+			if (seen.has(mount.app)) continue;
+			seen.add(mount.app);
+
+			const file = resolve_entry(
+				path.join(/** @type {string} */ (apps_dir), mount.app, '@permissions'),
+				config.moduleExtensions
+			);
+
+			if (file) {
+				permissions.push({ app: mount.app, file: posixify(path.relative(cwd, file)) });
+			}
+		}
+	}
+
+	// create route data by processing files in `src/apps/<App>/{views,api}` (or `src/routes`)
+	if (mounts.length > 0) {
 		/**
+		 * @param {import('types').AppMount} mount
 		 * @param {number} depth
-		 * @param {string} id
+		 * @param {string} dir_id The path within the mount, `''` for the mount's root.
 		 * @param {string} segment
 		 * @param {import('types').RouteData | null} parent
 		 */
-		const walk = (depth, id, segment, parent) => {
+		const walk = (mount, depth, dir_id, segment, parent) => {
+			// `dir_id` is the path within the mount, without a leading slash (`''` at its root)
+			const id = dir_id ? `${mount.prefix}/${dir_id}` : mount.prefix || '/';
+
+			// the route's id, which is namespaced on the `api` tree so that the same pathname can
+			// exist on both origins without the `RouteId` union becoming ambiguous
+			const route_id = dir_id ? `${mount.id_prefix}/${dir_id}` : mount.id_prefix || '/';
+
 			const unescaped = id.replace(/\[([ux])\+([^\]]+)\]/gi, (match, type, code) => {
 				if (match !== match.toLowerCase()) {
 					e.route_escape_uppercase({ id });
@@ -191,7 +283,10 @@ function create_routes_and_nodes(cwd, config, fallback) {
 
 			/** @type {import('types').RouteData} */
 			const route = {
-				id,
+				id: route_id,
+				dir: dir_id ? path.posix.join(mount.base, dir_id) : mount.base,
+				tree: mount.tree,
+				app: mount.app,
 				parent,
 
 				segment,
@@ -201,6 +296,7 @@ function create_routes_and_nodes(cwd, config, fallback) {
 				layout: null,
 				error: null,
 				leaf: null,
+				access: null,
 				page: null,
 				endpoint: null
 			};
@@ -212,7 +308,7 @@ function create_routes_and_nodes(cwd, config, fallback) {
 			// if we don't do this, the route map becomes unwieldy to console.log
 			Object.defineProperty(route, 'parent', { enumerable: false });
 
-			const dir = path.join(cwd, routes_base, id);
+			const dir = path.join(mount.dir, dir_id);
 
 			// We sort the entries because `readdirSync` order is not guaranteed and differs
 			// between runtimes (e.g. Node returns entries alphabetically, Bun in directory
@@ -266,10 +362,29 @@ function create_routes_and_nodes(cwd, config, fallback) {
 					const ext = valid_extensions.find((ext) => name.endsWith(ext));
 					if (ext) name = name.slice(0, -ext.length);
 
-					if (component_name_pattern.test(name) || module_name_pattern.test(name)) continue;
+					if (
+						name === '+access' ||
+						component_name_pattern.test(name) ||
+						module_name_pattern.test(name)
+					) {
+						continue;
+					}
 				}
 
 				const project_relative = posixify(path.relative(cwd, path.join(dir, file.name)));
+
+				// `+access` declares the permissions a route requires. It is a plain module rather
+				// than a route file, so it must be handled before `analyze`, which rejects anything
+				// it doesn't recognise. Permissions are an `apps`-mode concept — in legacy mode the
+				// file is reserved, exactly as it was before this feature existed.
+				if (use_apps && config.moduleExtensions.some((ext) => file.name === `+access${ext}`)) {
+					if (route.access) {
+						duplicate_files('access module', route.access);
+					}
+
+					route.access = project_relative;
+					continue;
+				}
 
 				const item = analyze(
 					project_relative,
@@ -282,6 +397,11 @@ function create_routes_and_nodes(cwd, config, fallback) {
 					e.route_server_file_hash_router({ file: project_relative });
 				}
 
+				// the `api` tree is endpoints only — there is nothing to render on that origin
+				if (mount.tree === 'api' && (item.kind === 'component' || item.is_page || item.is_layout)) {
+					e.app_api_file_not_allowed({ file: project_relative });
+				}
+
 				/**
 				 * @param {string} type
 				 * @param {string} existing_file
@@ -290,7 +410,7 @@ function create_routes_and_nodes(cwd, config, fallback) {
 				function duplicate_files(type, existing_file) {
 					e.route_duplicate_files({
 						type,
-						directory: `${routes_base}${route.id}`,
+						directory: `${mount.base}${dir_id || '/'}`,
 						existing: path.basename(existing_file),
 						file: file.name
 					});
@@ -358,49 +478,86 @@ function create_routes_and_nodes(cwd, config, fallback) {
 			// then handle children
 			for (const file of files) {
 				if (file.is_dir) {
-					walk(depth + 1, path.posix.join(id, file.name), file.name, route);
+					walk(mount, depth + 1, path.posix.join(dir_id, file.name), file.name, route);
 				}
 			}
 		};
 
-		walk(0, '/', '', null);
-
-		if (routes.length === 1) {
-			const root = routes[0];
-			if (!root.leaf && !root.error && !root.layout && !root.endpoint) {
-				e.routes_not_found();
+		for (const mount of mounts) {
+			if (fs.existsSync(mount.dir)) {
+				walk(mount, 0, '', '', null);
+			} else if (!use_apps) {
+				// If there's no routes directory, we'll just create a single empty route. This ensures the root layout and
+				// error components are included in the manifest, which is needed for subsequent build/dev commands to work
+				routes.push({
+					id: '/',
+					dir: mount.base,
+					tree: 'views',
+					app: mount.app,
+					segment: '',
+					pattern: /^$/,
+					params: [],
+					parent: null,
+					layout: null,
+					error: null,
+					leaf: null,
+					access: null,
+					page: null,
+					endpoint: null
+				});
 			}
 		}
-	} else {
-		// If there's no routes directory, we'll just create a single empty route. This ensures the root layout and
-		// error components are included in the manifest, which is needed for subsequent build/dev commands to work
-		routes.push({
-			id: '/',
-			segment: '',
-			pattern: /^$/,
-			params: [],
-			parent: null,
-			layout: null,
-			error: null,
-			leaf: null,
-			page: null,
-			endpoint: null
-		});
+	}
+
+	if (use_apps) {
+		if (!routes.some((route) => route.leaf || route.error || route.layout || route.endpoint)) {
+			e.apps_no_routes({
+				directory: posixify(path.relative(cwd, /** @type {string} */ (apps_dir)))
+			});
+		}
+	} else if (fs.existsSync(config.files.routes) && routes.length === 1) {
+		const root = routes[0];
+		if (!root.leaf && !root.error && !root.layout && !root.endpoint) {
+			e.routes_not_found();
+		}
 	}
 
 	prevent_conflicts(routes);
 
-	// fallback root layout and root error components
-	const root = routes[0];
+	if (use_apps) {
+		// a requirement can only be expanded against the app's own vocabulary, so a `+access`
+		// module without a `@permissions` module is always a mistake
+		for (const route of routes) {
+			if (!route.access) continue;
 
-	if (!root.layout?.component) {
-		if (!root.layout) root.layout = { depth: 0, child_pages: [] };
-		root.layout.component = posixify(path.relative(cwd, `${fallback}/layout.svelte`));
+			if (!permissions.some((app_permissions) => app_permissions.app === route.app)) {
+				e.app_access_without_permissions({ file: route.access, app: route.app });
+			}
+		}
 	}
 
-	if (!root.error?.component) {
-		if (!root.error) root.error = { depth: 0, parent: root.layout };
-		root.error.component = posixify(path.relative(cwd, `${fallback}/error.svelte`));
+	// In `apps` mode the root layout is `src/apps/@root/@layout.*`, which wraps every page in
+	// every app. Otherwise, fall back to injecting the default layout and error components into
+	// the first route, which is the root route of the single mount.
+	if (root_layout) {
+		root_error = {
+			depth: 0,
+			component: posixify(path.relative(cwd, `${fallback}/error.svelte`))
+		};
+
+		nodes.push(root_layout, root_error);
+	} else {
+		const root = routes[0];
+
+		if (!root.layout?.component) {
+			if (!root.layout) root.layout = { depth: 0, child_pages: [] };
+			root.layout.component = posixify(path.relative(cwd, `${fallback}/layout.svelte`));
+		}
+
+		if (!root.error?.component) {
+			if (!root.error) root.error = { depth: 0, parent: root.layout };
+			root.error.component = posixify(path.relative(cwd, `${fallback}/error.svelte`));
+		}
 	}
 
 	// populate the page nodes list
@@ -473,12 +630,42 @@ function create_routes_and_nodes(cwd, config, fallback) {
 		}
 	}
 
+	if (root_layout && root_error) {
+		const root_layout_index = /** @type {number} */ (indexes.get(root_layout));
+		const root_error_index = /** @type {number} */ (indexes.get(root_error));
+		const root_layout_node = /** @type {import('types').PageNode} */ (root_layout);
+
+		for (const route of routes) {
+			if (!route.page) continue;
+
+			// `@layout` wraps every page, regardless of which app it belongs to
+			route.page.layouts.unshift(root_layout_index);
+			route.page.errors.unshift(root_error_index);
+
+			// ...and is the parent of each app's outermost layout, so that `LayoutData`
+			// flows from `@layout.*` into every page's generated `$types`
+			/** @type {import('types').PageNode | null} */
+			let node = route.leaf;
+			while (node?.parent) node = node.parent;
+			if (node && node !== root_layout) node.parent = root_layout;
+
+			/** @type {import('types').PageNode[]} */ (root_layout_node.child_pages).push(
+				/** @type {import('types').PageNode} */ (route.leaf)
+			);
+		}
+	}
+
 	// remove route objects with no route file
 	routes = routes.filter((route) => route.endpoint || route.leaf || route.layout || route.error);
 
 	// add parents to error nodes so that we can compute which page options apply to them
 	for (const route of routes) {
 		if (!route.error) continue;
+
+		// the global layout is the parent of every app's error chain
+		if (root_layout && route.tree === 'views' && !route.error.parent) {
+			route.error.parent = root_layout;
+		}
 
 		/** @type {import('types').RouteData | null} */
 		let current_route = route;
@@ -499,6 +686,19 @@ function create_routes_and_nodes(cwd, config, fallback) {
 	for (const route of routes) {
 		if (route.endpoint) {
 			route.endpoint.page_options = get_page_options(route.endpoint.file, cwd);
+
+			// a prerendered endpoint is written to the same output directory as the `views` tree,
+			// so it would shadow any page with the same pathname
+			if (route.tree === 'api' && route.endpoint.page_options?.prerender) {
+				e.app_api_prerender({ file: route.endpoint.file });
+			}
+		}
+
+		// a route in `apps` mode maps to exactly one set of requirements, so it cannot serve both a
+		// page and an endpoint — `Accept` would decide which one answers, and the requirements of
+		// the two could differ
+		if (use_apps && route.page && route.endpoint) {
+			e.app_page_and_endpoint({ id: route.id, file: route.endpoint.file });
 		}
 
 		if (route.page && route.endpoint) {
@@ -512,12 +712,54 @@ function create_routes_and_nodes(cwd, config, fallback) {
 				});
 			}
 		}
+
+		// prerendered output is served as a static file, so `handle` never runs for it — any
+		// permission check performed there would be silently bypassed
+		const access_files = get_access_files(route);
+
+		if (is_app_route(route) && access_files.length > 0) {
+			const prerender = route.page
+				? nodes[route.page.leaf].page_options?.prerender
+				: route.endpoint?.page_options?.prerender;
+
+			if (prerender) {
+				e.app_permissions_prerender({
+					id: route.id,
+					file: access_files[access_files.length - 1]
+				});
+			}
+		}
 	}
 
 	return {
 		nodes,
-		routes: sort_routes(routes)
+		routes: sort_routes(routes),
+		mounts,
+		permissions,
+		root_layout,
+		root_layout_dir
 	};
+}
+
+/**
+ * The `+access` modules that apply to a route, outermost first. `requires` is inherited down the
+ * tree, so a route's requirements are the union of its own module and those of its ancestors.
+ * @param {import('types').RouteData} route
+ * @returns {string[]}
+ */
+export function get_access_files(route) {
+	/** @type {string[]} */
+	const files = [];
+
+	/** @type {import('types').RouteData | null} */
+	let current = route;
+
+	while (current) {
+		if (current.access) files.unshift(current.access);
+		current = current.parent;
+	}
+
+	return files;
 }
 
 /**

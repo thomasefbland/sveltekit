@@ -141,11 +141,16 @@ export function plugin_compile(
 				set_manifest_data(manifest_data);
 				sync.all(kit, root, manifest_data);
 
+				// in `apps` mode route files live under `files.apps` rather than `files.routes`, and
+				// entry names have to stay unique across apps — `@root/views/+page.svelte` and
+				// `shop/views/+page.svelte` are different entries despite having the same basename
+				const files_base = manifest_data.root_layout_dir ? kit.files.apps : kit.files.routes;
+
 				// add entry points for every endpoint...
 				manifest_data.routes.forEach((route) => {
 					if (route.endpoint) {
 						const resolved = path.resolve(root, route.endpoint.file);
-						const relative = decodeURIComponent(path.relative(kit.files.routes, resolved));
+						const relative = decodeURIComponent(path.relative(files_base, resolved));
 						const name = posixify(path.join('entries/endpoints', relative.replace(/\.js$/, '')));
 						server_input[name] = resolved;
 					}
@@ -156,7 +161,7 @@ export function plugin_compile(
 					for (const file of [node.component, node.universal, node.server]) {
 						if (file) {
 							const resolved = path.resolve(root, file);
-							const relative = decodeURIComponent(path.relative(kit.files.routes, resolved));
+							const relative = decodeURIComponent(path.relative(files_base, resolved));
 
 							const name = relative.startsWith('..')
 								? posixify(path.join('entries/fallbacks', path.basename(file)))
